@@ -1,0 +1,236 @@
+-- Carregar a biblioteca Rayfield
+local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
+
+-- Criar a janela do hub
+local Window = Rayfield:CreateWindow({
+   Name = "Tigro's hub",
+   Icon = 0,
+   LoadingTitle = "Tigro's hub",
+   LoadingSubtitle = "by Tigro",
+   ShowText = "Rayfield",
+   Theme = "Default",
+   ToggleUIKeybind = "K",
+   DisableRayfieldPrompts = false,
+   DisableBuildWarnings = false
+})
+
+local PlayersService = game:GetService("Players")
+local UIS = game:GetService("UserInputService")
+local RunService = game:GetService("RunService")
+local LocalPlayer = PlayersService.LocalPlayer
+
+----------------------
+-- Aba Menu Principal
+----------------------
+local MainMenuTab = Window:CreateTab("Menu Principal")
+
+-- Toggle Fly/InfiJump
+local FlyToggle = MainMenuTab:CreateToggle({
+    Name = "Fly",
+    CurrentValue = false,
+    Flag = "FlyToggle",
+    Callback = function(Value)
+        print("Fly:", Value)
+    end
+})
+
+-- Alternar toggle via tecla F (PC)
+UIS.InputBegan:Connect(function(input, gameProcessed)
+    if not gameProcessed and input.KeyCode == Enum.KeyCode.F then
+        FlyToggle:Set(not FlyToggle.CurrentValue)
+    end
+end)
+
+-- Fly/InfiJump funcional
+local flying = false
+local flySpeed = 50
+RunService.RenderStepped:Connect(function()
+    local char = LocalPlayer.Character
+    if char and char:FindFirstChild("Humanoid") and char:FindFirstChild("HumanoidRootPart") then
+        local hrp = char.HumanoidRootPart
+        if FlyToggle.CurrentValue then
+            flying = true
+            local direction = Vector3.new(0,0,0)
+            
+            if UIS:IsKeyDown(Enum.KeyCode.W) then direction = direction + hrp.CFrame.LookVector end
+            if UIS:IsKeyDown(Enum.KeyCode.S) then direction = direction - hrp.CFrame.LookVector end
+            if UIS:IsKeyDown(Enum.KeyCode.A) then direction = direction - hrp.CFrame.RightVector end
+            if UIS:IsKeyDown(Enum.KeyCode.D) then direction = direction + hrp.CFrame.RightVector end
+            if UIS:IsKeyDown(Enum.KeyCode.Space) then direction = direction + Vector3.new(0,1,0) end
+            if UIS:IsKeyDown(Enum.KeyCode.LeftShift) then direction = direction + Vector3.new(0,-1,0) end
+            
+            if direction.Magnitude > 0 then
+                hrp.AssemblyLinearVelocity = direction.Unit * flySpeed
+            else
+                hrp.AssemblyLinearVelocity = Vector3.new(0,0,0)
+            end
+            
+            char.Humanoid.PlatformStand = true
+        else
+            if flying then
+                flying = false
+                char.Humanoid.PlatformStand = false
+            end
+        end
+    end
+end)
+
+-- Pulo infinito
+local function setupJumping(char)
+    char:WaitForChild("Humanoid").Jumping:Connect(function()
+        if FlyToggle.CurrentValue then
+            char.Humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
+        end
+    end)
+end
+
+if LocalPlayer.Character then
+    setupJumping(LocalPlayer.Character)
+end
+
+LocalPlayer.CharacterAdded:Connect(setupJumping)
+
+-- Variável para posição salva
+local savedPosition = nil
+
+-- Botão salvar posição
+MainMenuTab:CreateButton({
+    Name = "Salvar posição atual",
+    Callback = function()
+        local char = LocalPlayer.Character
+        if char and char:FindFirstChild("HumanoidRootPart") then
+            savedPosition = char.HumanoidRootPart.CFrame
+            print("Posição salva!")
+        end
+    end
+})
+
+-- Botão teleportar para posição salva
+MainMenuTab:CreateButton({
+    Name = "Teleportar para posição salva",
+    Callback = function()
+        local char = LocalPlayer.Character
+        if savedPosition and char and char:FindFirstChild("HumanoidRootPart") then
+            char.HumanoidRootPart.CFrame = savedPosition
+            print("Teleportado para a posição salva!")
+        else
+            print("Nenhuma posição salva!")
+        end
+    end
+})
+
+----------------------
+-- Aba Troll
+----------------------
+local TrollTab = Window:CreateTab("Troll")
+
+local selectedPlayerName = nil
+
+-- Função para pegar todos os jogadores ativos
+local function getPlayerNames()
+    local names = {}
+    for _, p in pairs(PlayersService:GetPlayers()) do
+        table.insert(names, p.Name)
+    end
+    return names
+end
+
+-- Dropdown de seleção de jogador
+local PlayerDropdown = TrollTab:CreateDropdown({
+    Name = "Selecionar jogador",
+    Options = getPlayerNames(),
+    Callback = function(value)
+        selectedPlayerName = value
+        print("Jogador selecionado:", value)
+    end
+})
+
+-- Atualizar dropdown quando jogadores entram ou saem
+PlayersService.PlayerAdded:Connect(function()
+    PlayerDropdown:Refresh(getPlayerNames())
+end)
+PlayersService.PlayerRemoving:Connect(function()
+    PlayerDropdown:Refresh(getPlayerNames())
+end)
+
+----------------------
+-- Aimbots
+----------------------
+local AimbotClosestEnabled = false
+local AimbotSelectedEnabled = false
+local CurrentTarget = nil
+
+-- Função para pegar player mais próximo
+local function getClosestPlayer()
+    local closestPlayer = nil
+    local shortestDistance = math.huge
+    local localChar = LocalPlayer.Character
+    if not localChar or not localChar:FindFirstChild("HumanoidRootPart") then return nil end
+    local localPos = localChar.HumanoidRootPart.Position
+    
+    for _, p in pairs(PlayersService:GetPlayers()) do
+        if p ~= LocalPlayer and p.Character and p.Character:FindFirstChild("HumanoidRootPart") and p.Character:FindFirstChild("Humanoid").Health > 0 then
+            local dist = (p.Character.HumanoidRootPart.Position - localPos).Magnitude
+            if dist < shortestDistance then
+                shortestDistance = dist
+                closestPlayer = p
+            end
+        end
+    end
+    return closestPlayer
+end
+
+-- Toggle de Aimbot (mais próximo)
+TrollTab:CreateToggle({
+    Name = "Aimbot (player mais próximo)",
+    CurrentValue = false,
+    Flag = "AimbotClosestToggle",
+    Callback = function(Value)
+        AimbotClosestEnabled = Value
+        if not Value then
+            CurrentTarget = nil
+        end
+    end
+})
+
+-- Toggle de Aimbot (jogador selecionado)
+TrollTab:CreateToggle({
+    Name = "Aimbot (jogador selecionado)",
+    CurrentValue = false,
+    Flag = "AimbotSelectedToggle",
+    Callback = function(Value)
+        AimbotSelectedEnabled = Value
+    end
+})
+
+-- Atualizar mira (com suavidade)
+RunService.RenderStepped:Connect(function()
+    local cam = workspace.CurrentCamera
+
+    -- Se modo "mais próximo" estiver ligado
+    if AimbotClosestEnabled then
+        if not CurrentTarget or not CurrentTarget.Character or not CurrentTarget.Character:FindFirstChild("Humanoid") or CurrentTarget.Character.Humanoid.Health <= 0 then
+            CurrentTarget = getClosestPlayer()
+        else
+            local closest = getClosestPlayer()
+            if closest and closest ~= CurrentTarget then
+                CurrentTarget = closest
+            end
+        end
+    end
+
+    -- Se modo "selecionado" estiver ligado
+    if AimbotSelectedEnabled and selectedPlayerName then
+        local p = PlayersService:FindFirstChild(selectedPlayerName)
+        if p and p.Character and p.Character:FindFirstChild("Humanoid") and p.Character.Humanoid.Health > 0 then
+            CurrentTarget = p
+        end
+    end
+
+    -- Travar mira no alvo (suave)
+    if CurrentTarget and CurrentTarget.Character and CurrentTarget.Character:FindFirstChild("Head") then
+        local targetPos = CurrentTarget.Character.Head.Position
+        local newCFrame = CFrame.new(cam.CFrame.Position, targetPos)
+        cam.CFrame = cam.CFrame:Lerp(newCFrame, 0.2)
+    end
+end)
